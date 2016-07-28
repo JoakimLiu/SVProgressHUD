@@ -13,14 +13,15 @@
 #define UI_APPEARANCE_SELECTOR
 
 #endif
-
+/// 触摸事件状态
 extern NSString * const SVProgressHUDDidReceiveTouchEventNotification;
 extern NSString * const SVProgressHUDDidTouchDownInsideNotification;
+/// 四种显示的状态 跟ViewController 四个view显示的方法相同
 extern NSString * const SVProgressHUDWillDisappearNotification;
 extern NSString * const SVProgressHUDDidDisappearNotification;
 extern NSString * const SVProgressHUDWillAppearNotification;
 extern NSString * const SVProgressHUDDidAppearNotification;
-
+/// 发通知时的相关信息 程序里面就是 self.statusLabel.text
 extern NSString * const SVProgressHUDStatusUserInfoKey;
 
 typedef NS_ENUM(NSInteger, SVProgressHUDStyle) {
@@ -28,7 +29,7 @@ typedef NS_ENUM(NSInteger, SVProgressHUDStyle) {
     SVProgressHUDStyleDark,         // black HUD and white text, HUD background will be blurred on iOS 8 and above
     SVProgressHUDStyleCustom        // uses the fore- and background color properties
 };
-
+/// 遮罩类型 除了None其他的都不能点击
 typedef NS_ENUM(NSUInteger, SVProgressHUDMaskType) {
     SVProgressHUDMaskTypeNone = 1,  // default mask type, allow user interactions while HUD is displayed
     SVProgressHUDMaskTypeClear,     // don't allow user interactions
@@ -36,7 +37,7 @@ typedef NS_ENUM(NSUInteger, SVProgressHUDMaskType) {
     SVProgressHUDMaskTypeGradient,  // don't allow user interactions and dim the UI with a a-la UIAlertView background gradient, as on iOS 6
     SVProgressHUDMaskTypeCustom     // don't allow user interactions and dim the UI in the back of the HUD with a custom color
 };
-
+/// 提示的样式 Flat:自定义的 Native:默认的，即使用 UIActivityIndicatorView 提示
 typedef NS_ENUM(NSUInteger, SVProgressHUDAnimationType) {
     SVProgressHUDAnimationTypeFlat,     // default animation type, custom flat animation (indefinite animated ring)
     SVProgressHUDAnimationTypeNative    // iOS native UIActivityIndicatorView
@@ -51,23 +52,32 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 @property (assign, nonatomic) SVProgressHUDStyle defaultStyle UI_APPEARANCE_SELECTOR;                   // default is SVProgressHUDStyleLight
 @property (assign, nonatomic) SVProgressHUDMaskType defaultMaskType UI_APPEARANCE_SELECTOR;             // default is SVProgressHUDMaskTypeNone
 @property (assign, nonatomic) SVProgressHUDAnimationType defaultAnimationType UI_APPEARANCE_SELECTOR;   // default is SVProgressHUDAnimationTypeFlat
+
+/// hudView min size
 @property (assign, nonatomic) CGSize minimumSize UI_APPEARANCE_SELECTOR;            // default is CGSizeZero, can be used to avoid resizing for a larger message
+/// Flat 类型时 环形的厚度
 @property (assign, nonatomic) CGFloat ringThickness UI_APPEARANCE_SELECTOR;         // default is 2 pt
+/// Flat 类型时 环形半径、没有文字的半径
 @property (assign, nonatomic) CGFloat ringRadius UI_APPEARANCE_SELECTOR;            // default is 18 pt
 @property (assign, nonatomic) CGFloat ringNoTextRadius UI_APPEARANCE_SELECTOR;      // default is 24 pt
 @property (assign, nonatomic) CGFloat cornerRadius UI_APPEARANCE_SELECTOR;          // default is 14 pt
+/// 提示文本字体大小
 @property (strong, nonatomic) UIFont *font UI_APPEARANCE_SELECTOR;                  // default is [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]
 @property (strong, nonatomic) UIColor *backgroundColor UI_APPEARANCE_SELECTOR;      // default is [UIColor whiteColor]
 @property (strong, nonatomic) UIColor *foregroundColor UI_APPEARANCE_SELECTOR;      // default is [UIColor blackColor]
 @property (strong, nonatomic) UIColor *backgroundLayerColor UI_APPEARANCE_SELECTOR; // default is [UIColor colorWithWhite:0 alpha:0.4]
+/// 提示、成功、错误状态的提示图片
 @property (strong, nonatomic) UIImage *infoImage UI_APPEARANCE_SELECTOR;            // default is the bundled info image provided by Freepik
 @property (strong, nonatomic) UIImage *successImage UI_APPEARANCE_SELECTOR;         // default is the bundled success image provided by Freepik
 @property (strong, nonatomic) UIImage *errorImage UI_APPEARANCE_SELECTOR;           // default is the bundled error image provided by Freepik
+/// Extension的view（对Extension不懂）
 @property (strong, nonatomic) UIView *viewForExtension UI_APPEARANCE_SELECTOR;      // default is nil, only used if #define SV_APP_EXTENSIONS is set
+/// 最短的消失时间间隔
 @property (assign, nonatomic) NSTimeInterval minimumDismissTimeInterval;            // default is 5.0 seconds
-
+/// 距离中心位置的偏移值
 @property (assign, nonatomic) UIOffset offsetFromCenter UI_APPEARANCE_SELECTOR;     // default is 0, 0
 
+/// 逐渐出现和消失的动画持续时间
 @property (assign, nonatomic) NSTimeInterval fadeInAnimationDuration;  // default is 0.15
 @property (assign, nonatomic) NSTimeInterval fadeOutAnimationDuration; // default is 0.15
 
@@ -127,8 +137,10 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 + (void)dismissWithCompletion:(SVProgressHUDDismissCompletion)completion;
 + (void)dismissWithDelay:(NSTimeInterval)delay completion:(SVProgressHUDDismissCompletion)completion;
 
+/// 是否可见 
 + (BOOL)isVisible;
 
+/// 根据提示文本信息获取hud持续时间
 + (NSTimeInterval)displayDurationForString:(NSString*)string;
 
 @end

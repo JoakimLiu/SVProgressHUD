@@ -13,7 +13,23 @@
 #import "SVIndefiniteAnimatedView.h"
 #import "SVProgressAnimatedView.h"
 #import "SVRadialGradientLayer.h"
-
+/*
+ 没有接触过的新知识：
+ UIMotionEffect 移动效果
+ Accessibility
+ 
+知识点：
+ 1、自定义layer:SVRadialGradientLayer
+ 2、自定义菊花样式：其实就是用的了 CAShapeLayer，其他的开源的菊花转也有各种样式的类型 应该都是用的layer
+ 3、View的transform property
+ 4、imageView的renderingMode property
+ 5、imageView 的tintColor property (tint color参考链接：http://southpeak.github.io/blog/2015/06/30/ios-techset-3/、https://www.captechconsulting.com/blogs/ios-7-tutorial-series-tint-color-and-easy-app-theming 可以考虑是否实现多主题 keyword:ios use tintcolor implement color theme)
+ 6、NSRunLoopCommonModes
+ 7、CATransaction
+ 
+ 需要注意的地方：
+ setNeedsDisplay
+ */
 NSString * const SVProgressHUDDidReceiveTouchEventNotification = @"SVProgressHUDDidReceiveTouchEventNotification";
 NSString * const SVProgressHUDDidTouchDownInsideNotification = @"SVProgressHUDDidTouchDownInsideNotification";
 NSString * const SVProgressHUDWillDisappearNotification = @"SVProgressHUDWillDisappearNotification";
@@ -28,21 +44,28 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
 static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 
 @interface SVProgressHUD ()
-
+/// 渐变退出的定时器
 @property (nonatomic, strong, readonly) NSTimer *fadeOutTimer;
+/// 背景是否为清晰的 貌似 isClear 在项目里面没有用处
 @property (nonatomic, readonly, getter = isClear) BOOL clear;
 
+/// 整个层级 overlayView -> self -> hudView -> statusLabel&imageView
 @property (nonatomic, strong) UIControl *overlayView;
 @property (nonatomic, strong) UIView *hudView;
 
+/// 提示文本label
 @property (nonatomic, strong) UILabel *statusLabel;
+/// 提示图片
 @property (nonatomic, strong) UIImageView *imageView;
 @property (nonatomic, strong) UIView *indefiniteAnimatedView;
+/// Flat类型下 环形view （由两个view构成 后面的是一个大环形，前面的渐变，慢慢的(像圆形进度条一样)填充满后面view）
 @property (nonatomic, strong) SVProgressAnimatedView *ringView;
 @property (nonatomic, strong) SVProgressAnimatedView *backgroundRingView;
 @property (nonatomic, strong) CALayer *backgroundLayer;
 
+/// 进度 用来更新ringView
 @property (nonatomic, readwrite) CGFloat progress;
+/// 活动数量
 @property (nonatomic, readwrite) NSUInteger activityCount;
 
 @property (nonatomic, readonly) CGFloat visibleKeyboardHeight;
@@ -89,9 +112,10 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 
 
 @implementation SVProgressHUD {
+    // 是否正在初始化
     BOOL _isInitializing;
 }
-
+/// 单列
 + (SVProgressHUD*)sharedView {
     static dispatch_once_t once;
     
@@ -354,7 +378,8 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
         UIImage* infoImage = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"info" ofType:@"png"]];
         UIImage* successImage = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"success" ofType:@"png"]];
         UIImage* errorImage = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"error" ofType:@"png"]];
-
+        
+        // 图片渲染
         if ([[UIImage class] instancesRespondToSelector:@selector(imageWithRenderingMode:)]) {
             _infoImage = [infoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
             _successImage = [successImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
@@ -389,9 +414,12 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 - (void)updateHUDFrame {
     // For the beginning use default values, these
     // might get update if string is too large etc.
+    /// hudView size
     CGFloat hudWidth = 100.0f;
     CGFloat hudHeight = 100.0f;
+    /// 提示信息临时高度
     CGFloat stringHeightBuffer = 20.0f;
+    /// 提示信息和其他内容临时总高度
     CGFloat stringAndContentHeightBuffer = 80.0f;
     CGRect labelRect = CGRectZero;
     
@@ -423,19 +451,23 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
             }
             stringRect = CGRectMake(0.0f, 0.0f, stringSize.width, stringSize.height);
         }
-
-        CGFloat stringWidth = stringRect.size.width;
-        CGFloat stringHeight = ceilf(CGRectGetHeight(stringRect));
         
+        CGFloat stringWidth = stringRect.size.width;
+        // 向上取整 3.4 or 3.6 -> 4.0
+        CGFloat stringHeight = ceilf(CGRectGetHeight(stringRect));
+        // 图片或者菊花 即文本上面有内容
         if(imageUsed || progressUsed) {
             hudHeight = stringAndContentHeightBuffer + stringHeight;
         } else {
             hudHeight = stringHeightBuffer + stringHeight;
         }
+        // hudWidth 向上取整
         if(stringWidth > hudWidth) {
             hudWidth = ceilf(stringWidth/2)*2;
         }
+        // label.y
         CGFloat labelRectY = (imageUsed || progressUsed) ? 68.0f : 9.0f;
+        // 这里判断的100.0f
         if(hudHeight > 100.0f) {
             labelRect = CGRectMake(12.0f, labelRectY, hudWidth, stringHeight);
             hudWidth += 24.0f;
@@ -448,22 +480,24 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
     // Update values on subviews
     self.hudView.bounds = CGRectMake(0.0f, 0.0f, MAX(self.minimumSize.width, hudWidth), MAX(self.minimumSize.height, hudHeight));
     labelRect.size.width += MAX(0, self.minimumSize.width - hudWidth);
+    /// 更新背景模糊view
     [self updateBlurBounds];
     
+    /// 设计上面图片的center
     if(string) {
         self.imageView.center = CGPointMake(CGRectGetWidth(self.hudView.bounds)/2, 36.0f);
     } else {
-       	self.imageView.center = CGPointMake(CGRectGetWidth(self.hudView.bounds)/2, CGRectGetHeight(self.hudView.bounds)/2);
+        self.imageView.center = CGPointMake(CGRectGetWidth(self.hudView.bounds)/2, CGRectGetHeight(self.hudView.bounds)/2);
     }
-
-	self.statusLabel.hidden = NO;
-	self.statusLabel.frame = labelRect;
+    
+    self.statusLabel.hidden = NO;
+    self.statusLabel.frame = labelRect;
     
     // Animate value update
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    
-	if(string) {
+    // 根据是否有提示信息和SVProgressHUDAnimationType 来设置animatedView和ringView、backgroundRingView环形loadingView
+    if(string) {
         if(self.defaultAnimationType == SVProgressHUDAnimationTypeFlat) {
             SVIndefiniteAnimatedView *indefiniteAnimationView = (SVIndefiniteAnimatedView*)self.indefiniteAnimatedView;
             indefiniteAnimationView.radius = self.ringRadius;
@@ -495,10 +529,12 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 }
 
 - (void)updateMask {
+    // 背景layer
     if(self.backgroundLayer) {
         [self.backgroundLayer removeFromSuperlayer];
         self.backgroundLayer = nil;
     }
+    // 根据遮罩类型 设置背景layer
     switch (self.defaultMaskType) {
         case SVProgressHUDMaskTypeCustom:
         case SVProgressHUDMaskTypeBlack:{
@@ -512,7 +548,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
             break;
         }
             
-        case SVProgressHUDMaskTypeGradient:{
+        case SVProgressHUDMaskTypeGradient:{ // 自定义的layer
             SVRadialGradientLayer *layer = [SVRadialGradientLayer layer];
             self.backgroundLayer = layer;
             self.backgroundLayer.frame = self.bounds;
@@ -530,6 +566,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 }
 
 - (void)updateBlurBounds {
+    /// 在iOS8上 才会有系统自带的模糊UIBlurEffect
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 80000
     if(NSClassFromString(@"UIBlurEffect") && self.defaultStyle != SVProgressHUDStyleCustom) {
         // Remove background color, else the effect would not work
@@ -541,7 +578,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
                 [subview removeFromSuperview];
             }
         }
-        
+        // 可以看看这篇文章：美 CRY，给 iOS 状态栏增加 vibrance 效果 http://www.jianshu.com/p/50b6ec391749
         if(self.backgroundColor != [UIColor clearColor]) {
             // Create blur effect
             UIBlurEffectStyle blurEffectStyle = self.defaultStyle == SVProgressHUDStyleDark ? UIBlurEffectStyleDark : UIBlurEffectStyleLight;
@@ -584,23 +621,23 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
         UIMotionEffectGroup *effectGroup = [[UIMotionEffectGroup alloc] init];
         effectGroup.motionEffects = @[effectX, effectY];
         
-        // Clear old motion effect, then add new motion effects
+        // Clear old motion effect, then add new motion effects  都会先清除以前的效果，然后添加新的效果
         self.hudView.motionEffects = @[];
         [self.hudView addMotionEffect:effectGroup];
     }
 }
-
+/// 更新View的层级
 - (void)updateViewHierachy {
     // Add the overlay (e.g. black, gradient) to the application window if necessary
     if(!self.overlayView.superview) {
 #if !defined(SV_APP_EXTENSIONS)
-        // Default case: iterate over UIApplication windows
+        // Default case: iterate over UIApplication windows  在 overlayView 添加到Windows上去 这里为什么不直接取keyWindow？
         NSEnumerator *frontToBackWindows = [UIApplication.sharedApplication.windows reverseObjectEnumerator];
         for (UIWindow *window in frontToBackWindows) {
             BOOL windowOnMainScreen = window.screen == UIScreen.mainScreen;
             BOOL windowIsVisible = !window.hidden && window.alpha > 0;
             BOOL windowLevelNormal = window.windowLevel == UIWindowLevelNormal;
-            
+            // 满足三个条件 window尺寸大小、window可见、window层级
             if(windowOnMainScreen && windowIsVisible && windowLevelNormal) {
                 [window addSubview:self.overlayView];
                 break;
@@ -682,7 +719,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 - (NSDictionary*)notificationUserInfo{
     return (self.statusLabel.text ? @{SVProgressHUDStatusUserInfoKey : self.statusLabel.text} : nil);
 }
-
+/// 设置HUD位置 根据通知：UIApplicationDidChangeStatusBarOrientationNotification、UIKeyboardWillHideNotification、UIKeyboardDidHideNotification、UIKeyboardWillShowNotification、UIKeyboardDidShowNotification、UIApplicationDidBecomeActiveNotification（横竖屏、键盘相关通知、App活跃状态）
 - (void)positionHUD:(NSNotification*)notification {
     CGFloat keyboardHeight = 0.0f;
     double animationDuration = 0.0;
@@ -702,6 +739,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 #endif
     
     // no transforms applied to window in iOS 8, but only if compiled with iOS 8 sdk as base sdk, otherwise system supports old rotation logic.
+    // iOS8 window能够自动处理 方向
     BOOL ignoreOrientation = NO;
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 80000
     if([[NSProcessInfo processInfo] respondsToSelector:@selector(operatingSystemVersion)]) {
@@ -738,6 +776,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 #endif
     
 #if TARGET_OS_IOS
+    // 如果考虑方向并且当前是横屏 则调换宽高
     if(!ignoreOrientation && UIInterfaceOrientationIsLandscape(orientation)) {
         float temp = CGRectGetWidth(orientationFrame);
         orientationFrame.size.width = CGRectGetHeight(orientationFrame);
@@ -748,7 +787,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
         statusBarFrame.size.height = temp;
     }
     
-    // Update the motion effects in regards to orientation
+    // Update the motion effects in regards to orientation  更新有关于方向的移动效果
     [self updateMotionEffectForOrientation:orientation];
 #else
     [self updateMotionEffectForXMotionEffectType:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis yMotionEffectType:UIInterpolatingMotionEffectTypeTiltAlongHorizontalAxis];
@@ -819,7 +858,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 
 
 #pragma mark - Event handling
-
+/// 点击事件 点击overlayView 和 hudView
 - (void)overlayViewDidReceiveTouchEvent:(id)sender forEvent:(UIEvent*)event {
     [[NSNotificationCenter defaultCenter] postNotificationName:SVProgressHUDDidReceiveTouchEventNotification
                                                         object:self
@@ -839,7 +878,9 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 #pragma mark - Master show/dismiss methods
 
 - (void)showProgress:(float)progress status:(NSString*)status {
+    /// 防止循环引用 __weak __strong处理
     __weak SVProgressHUD *weakSelf = self;
+    /// 在主线程里面处理
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
         __strong SVProgressHUD *strongSelf = weakSelf;
         if(strongSelf){
@@ -859,6 +900,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
             strongSelf.statusLabel.text = status;
             strongSelf.progress = progress;
             
+            // progress大于0则显示ringView 反之显示indefiniteView
             // Choose the "right" indicator depending on the progress
             if(progress >= 0) {
                 // Cancel the indefiniteAnimatedView, then show the ringLayer
@@ -867,6 +909,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
                 // Add ring to HUD and set progress
                 [strongSelf.hudView addSubview:strongSelf.ringView];
                 [strongSelf.hudView addSubview:strongSelf.backgroundRingView];
+                // 设置ringView的加载进度
                 strongSelf.ringView.strokeEnd = progress;
                 
                 // Updat the activity count
@@ -903,6 +946,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
             
             // Reset progress and cancel any running animation
             strongSelf.progress = SVProgressHUDUndefinedProgress;
+            // 显示图片 则干掉ringView indefiniteAnimatedView
             [strongSelf cancelRingLayerAnimation];
             [strongSelf cancelIndefiniteAnimatedViewAnimation];
             
@@ -1103,7 +1147,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 
 
 #pragma mark - Ring progress animation
-
+/// 获取animatedView
 - (UIView*)indefiniteAnimatedView {
     // Get the correct spinner for defaultAnimationType
     if(self.defaultAnimationType == SVProgressHUDAnimationTypeFlat){
@@ -1117,7 +1161,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
             _indefiniteAnimatedView = [[SVIndefiniteAnimatedView alloc] initWithFrame:CGRectZero];
         }
         
-        // Update styling
+        // Update styling Flat类型下 自定义的菊花提示View
         SVIndefiniteAnimatedView *indefiniteAnimatedView = (SVIndefiniteAnimatedView*)_indefiniteAnimatedView;
         indefiniteAnimatedView.strokeColor = self.foregroundColorForStyle;
         indefiniteAnimatedView.strokeThickness = self.ringThickness;
@@ -1202,7 +1246,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
 
 
 #pragma mark - Getters
-
+// 自动消失的时间
 + (NSTimeInterval)displayDurationForString:(NSString*)string {
     return MAX((float)string.length * 0.06 + 0.5, [self sharedView].minimumDismissTimeInterval);
 }
@@ -1311,9 +1355,10 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
     }
     return _imageView;
 }
-
+// 获取可见的键盘高度
 - (CGFloat)visibleKeyboardHeight {
 #if !defined(SV_APP_EXTENSIONS)
+    // 寻找键盘window
     UIWindow *keyboardWindow = nil;
     for (UIWindow *testWindow in [[UIApplication sharedApplication] windows]) {
         if(![[testWindow class] isEqual:[UIWindow class]]) {
@@ -1321,7 +1366,7 @@ static const CGFloat SVProgressHUDDefaultAnimationDuration = 0.15;
             break;
         }
     }
-    
+    // 这里获取 可能的键盘View 跟设置searchBar的placeholder做法类似
     for (__strong UIView *possibleKeyboard in [keyboardWindow subviews]) {
         if([possibleKeyboard isKindOfClass:NSClassFromString(@"UIPeripheralHostView")] || [possibleKeyboard isKindOfClass:NSClassFromString(@"UIKeyboard")]) {
             return CGRectGetHeight(possibleKeyboard.bounds);
